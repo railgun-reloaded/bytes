@@ -1,0 +1,11 @@
+# npm installed local dependencies
+node_modules
+*.js
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+
+# Build files
+tsconfig.tsbuildinfo
