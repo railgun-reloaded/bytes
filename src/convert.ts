@@ -11,20 +11,30 @@ const stripHexPrefix = (hex: string): string => {
 
 /**
  * Converts a hex string to a `Uint8Array`. Accepts input with or without a
- * leading `0x` prefix. Rejects odd-length strings and strings containing
- * non-hex characters by throwing.
+ * leading `0x` prefix. Strings containing non-hex characters are always
+ * rejected by throwing. Odd-length strings are rejected by default; pass
+ * `{ allowOddLength: true }` to left-pad odd-length input with a single
+ * leading zero nibble before decoding (use only for upstream sources that
+ * are known to drop leading-zero nibbles, e.g. some indexer JSON payloads).
  * @param hex - Hex string to convert.
+ * @param options - Decoding options.
+ * @param options.allowOddLength - When `true`, left-pad odd-length input
+ * with one leading zero nibble instead of throwing. Defaults to `false`.
  * @returns Byte array decoded from the hex string. Empty input returns an
  * empty `Uint8Array`.
- * @throws If the input has odd length or contains non-hex characters.
+ * @throws If the input contains non-hex characters, or has odd length and
+ * `allowOddLength` is not `true`.
  */
-const hexToBytes = (hex: string): Uint8Array => {
-  const stripped = stripHexPrefix(hex)
+const hexToBytes = (hex: string, options: { allowOddLength?: boolean } = {}): Uint8Array => {
+  let stripped = stripHexPrefix(hex)
   if (stripped.length === 0) {
     return new Uint8Array(0)
   }
   if (stripped.length % 2 !== 0) {
-    throw new Error(`hexToBytes: odd-length hex string (length=${stripped.length})`)
+    if (options.allowOddLength !== true) {
+      throw new Error(`hexToBytes: odd-length hex string (length=${stripped.length})`)
+    }
+    stripped = `0${stripped}`
   }
   if (!HEX_CHARACTERS.test(stripped)) {
     throw new Error('hexToBytes: input contains non-hex characters')
