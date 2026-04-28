@@ -1,12 +1,16 @@
 import { test } from 'brittle'
 
 import {
+  BigIntOverflowError,
+  InvalidByteLengthError,
+  InvalidHexError,
+  NegativeValueError,
+  OddLengthHexError,
   bigIntToBytes,
   bigIntToHex,
   bytesToBigInt,
   bytesToHex,
   hexToBytes,
-  hexlify,
   padBytesLeft,
   stripHexPrefix,
 } from '../src/index'
@@ -32,9 +36,9 @@ test('hexToBytes empty input returns empty array', (t) => {
   t.alike(hexToBytes('0x'), new Uint8Array(0))
 })
 
-test('hexToBytes rejects odd-length input', (t) => {
-  t.exception(() => hexToBytes('abc'), /odd-length/)
-  t.exception(() => hexToBytes('0xabc'), /odd-length/)
+test('hexToBytes throws OddLengthHexError on odd-length input', (t) => {
+  t.exception(() => hexToBytes('abc'), OddLengthHexError)
+  t.exception(() => hexToBytes('0xabc'), OddLengthHexError)
 })
 
 test('hexToBytes with allowOddLength left-pads odd-length input', (t) => {
@@ -51,13 +55,19 @@ test('hexToBytes with allowOddLength leaves even-length input unchanged', (t) =>
   t.alike(hexToBytes('abcd', { allowOddLength: true }), new Uint8Array([0xab, 0xcd]))
 })
 
-test('hexToBytes with allowOddLength still rejects non-hex characters', (t) => {
-  t.exception(() => hexToBytes('zzz', { allowOddLength: true }), /non-hex/)
+test('hexToBytes with allowOddLength still throws InvalidHexError on non-hex', (t) => {
+  t.exception(() => hexToBytes('zzz', { allowOddLength: true }), InvalidHexError)
 })
 
-test('hexToBytes rejects non-hex characters', (t) => {
-  t.exception(() => hexToBytes('zz'), /non-hex/)
-  t.exception(() => hexToBytes('0xgg'), /non-hex/)
+test('hexToBytes throws InvalidHexError on non-hex characters', (t) => {
+  t.exception(() => hexToBytes('zz'), InvalidHexError)
+  t.exception(() => hexToBytes('0xgg'), InvalidHexError)
+})
+
+test('hexToBytes prefers InvalidHexError over OddLengthHexError', (t) => {
+  // 'z' is both odd-length and non-hex; non-hex is the more accurate error
+  // and must be reported first.
+  t.exception(() => hexToBytes('z'), InvalidHexError)
 })
 
 test('bytesToHex produces lowercase hex without prefix by default', (t) => {
@@ -93,18 +103,18 @@ test('bigIntToBytes encodes big-endian with fixed length', (t) => {
   t.alike(bigIntToBytes(0n, 3), new Uint8Array([0, 0, 0]))
 })
 
-test('bigIntToBytes throws on overflow', (t) => {
-  t.exception(() => bigIntToBytes(0x100n, 1), /does not fit/)
-  t.exception(() => bigIntToBytes(0x10000n, 2), /does not fit/)
+test('bigIntToBytes throws BigIntOverflowError on overflow', (t) => {
+  t.exception(() => bigIntToBytes(0x100n, 1), BigIntOverflowError)
+  t.exception(() => bigIntToBytes(0x10000n, 2), BigIntOverflowError)
 })
 
-test('bigIntToBytes throws on negative values', (t) => {
-  t.exception(() => bigIntToBytes(-1n, 4), /negative/)
+test('bigIntToBytes throws NegativeValueError on negative values', (t) => {
+  t.exception(() => bigIntToBytes(-1n, 4), NegativeValueError)
 })
 
-test('bigIntToBytes throws on invalid byteLength', (t) => {
-  t.exception(() => bigIntToBytes(0n, -1), /invalid byteLength/)
-  t.exception(() => bigIntToBytes(0n, 1.5), /invalid byteLength/)
+test('bigIntToBytes throws InvalidByteLengthError on invalid byteLength', (t) => {
+  t.exception(() => bigIntToBytes(0n, -1), InvalidByteLengthError)
+  t.exception(() => bigIntToBytes(0n, 1.5), InvalidByteLengthError)
 })
 
 test('bigint round-trips through bytes', (t) => {
@@ -118,8 +128,8 @@ test('bigIntToHex produces zero-padded hex', (t) => {
   t.is(bigIntToHex(0n, 1), '00')
 })
 
-test('bigIntToHex throws on overflow', (t) => {
-  t.exception(() => bigIntToHex(0x10000n, 1))
+test('bigIntToHex throws BigIntOverflowError on overflow', (t) => {
+  t.exception(() => bigIntToHex(0x10000n, 1), BigIntOverflowError)
 })
 
 test('padBytesLeft pads short input with zeros', (t) => {
@@ -133,29 +143,4 @@ test('padBytesLeft returns input unchanged when already at or above target', (t)
   const bytes = new Uint8Array([1, 2, 3, 4])
   t.is(padBytesLeft(bytes, 4), bytes)
   t.is(padBytesLeft(bytes, 2), bytes)
-})
-
-test('hexlify coerces hex strings', (t) => {
-  t.is(hexlify('0xAbCd'), 'abcd')
-  t.is(hexlify('abcd'), 'abcd')
-  t.is(hexlify(''), '')
-})
-
-test('hexlify coerces bigints and numbers with even-length padding', (t) => {
-  t.is(hexlify(0n), '00')
-  t.is(hexlify(0xabn), 'ab')
-  t.is(hexlify(0xabcn), '0abc')
-  t.is(hexlify(255), 'ff')
-  t.is(hexlify(256), '0100')
-})
-
-test('hexlify coerces byte arrays', (t) => {
-  t.is(hexlify(new Uint8Array([0xab, 0xcd])), 'abcd')
-  t.is(hexlify(new Uint8Array(0)), '')
-})
-
-test('hexlify rejects non-hex strings and negative numbers', (t) => {
-  t.exception(() => hexlify('zzz'), /non-hex/)
-  t.exception(() => hexlify(-1n), /negative/)
-  t.exception(() => hexlify(-1), /negative/)
 })

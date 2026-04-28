@@ -1,3 +1,11 @@
+import {
+  BigIntOverflowError,
+  InvalidByteLengthError,
+  InvalidHexError,
+  NegativeValueError,
+  OddLengthHexError,
+} from './errors'
+
 const HEX_CHARACTERS = /^[0-9a-fA-F]*$/
 
 /**
@@ -12,17 +20,21 @@ const stripHexPrefix = (hex: string): string => {
 /**
  * Converts a hex string to a `Uint8Array`. Accepts input with or without a
  * leading `0x` prefix. Strings containing non-hex characters are always
- * rejected by throwing. Odd-length strings are rejected by default; pass
+ * rejected. Odd-length strings are rejected by default; pass
  * `{ allowOddLength: true }` to left-pad odd-length input with a single
  * leading zero nibble before decoding (use only for upstream sources that
  * are known to drop leading-zero nibbles, e.g. some indexer JSON payloads).
+ *
+ * Validates character set first so inputs like `'z'` produce an
+ * `InvalidHexError` rather than the misleading `OddLengthHexError`.
  * @param hex - Hex string to convert.
  * @param options - Decoding options.
  * @param options.allowOddLength - When `true`, left-pad odd-length input
  * with one leading zero nibble instead of throwing. Defaults to `false`.
  * @returns Byte array decoded from the hex string. Empty input returns an
  * empty `Uint8Array`.
- * @throws If the input contains non-hex characters, or has odd length and
+ * @throws {InvalidHexError} If the input contains non-hex characters.
+ * @throws {OddLengthHexError} If the input has odd length and
  * `allowOddLength` is not `true`.
  */
 const hexToBytes = (hex: string, options: { allowOddLength?: boolean } = {}): Uint8Array => {
@@ -30,14 +42,14 @@ const hexToBytes = (hex: string, options: { allowOddLength?: boolean } = {}): Ui
   if (stripped.length === 0) {
     return new Uint8Array(0)
   }
+  if (!HEX_CHARACTERS.test(stripped)) {
+    throw new InvalidHexError('hexToBytes: input contains non-hex characters')
+  }
   if (stripped.length % 2 !== 0) {
     if (options.allowOddLength !== true) {
-      throw new Error(`hexToBytes: odd-length hex string (length=${stripped.length})`)
+      throw new OddLengthHexError(`hexToBytes: odd-length hex string (length=${stripped.length})`)
     }
     stripped = `0${stripped}`
-  }
-  if (!HEX_CHARACTERS.test(stripped)) {
-    throw new Error('hexToBytes: input contains non-hex characters')
   }
 
   const bytes = new Uint8Array(stripped.length / 2)
@@ -81,15 +93,16 @@ const bytesToBigInt = (bytes: Uint8Array): bigint => {
  * @param value - Non-negative bigint value to encode.
  * @param byteLength - Exact length of the resulting byte array, in bytes.
  * @returns Big-endian byte array of length `byteLength`.
- * @throws If `value` is negative, `byteLength` is negative, or `value` does
- * not fit in `byteLength` bytes.
+ * @throws {NegativeValueError} If `value` is negative.
+ * @throws {InvalidByteLengthError} If `byteLength` is not a non-negative integer.
+ * @throws {BigIntOverflowError} If `value` does not fit in `byteLength` bytes.
  */
 const bigIntToBytes = (value: bigint, byteLength: number): Uint8Array => {
   if (value < 0n) {
-    throw new Error('bigIntToBytes: negative values are not supported')
+    throw new NegativeValueError('bigIntToBytes: negative values are not supported')
   }
   if (!Number.isInteger(byteLength) || byteLength < 0) {
-    throw new Error(`bigIntToBytes: invalid byteLength ${byteLength}`)
+    throw new InvalidByteLengthError(`bigIntToBytes: invalid byteLength ${byteLength}`)
   }
 
   const bytes = new Uint8Array(byteLength)
@@ -99,7 +112,7 @@ const bigIntToBytes = (value: bigint, byteLength: number): Uint8Array => {
     remaining >>= 8n
   }
   if (remaining !== 0n) {
-    throw new Error(`bigIntToBytes: value does not fit in ${byteLength} bytes`)
+    throw new BigIntOverflowError(`bigIntToBytes: value does not fit in ${byteLength} bytes`)
   }
   return bytes
 }
@@ -112,7 +125,8 @@ const bigIntToBytes = (value: bigint, byteLength: number): Uint8Array => {
  * @param options - Encoding options.
  * @param options.prefix - When `true`, prepends `0x` to the result. Defaults to `false`.
  * @returns Zero-padded lowercase hex string.
- * @throws If `value` is negative or does not fit in `byteLength` bytes.
+ * @throws {NegativeValueError} If `value` is negative.
+ * @throws {BigIntOverflowError} If `value` does not fit in `byteLength` bytes.
  */
 const bigIntToHex = (
   value: bigint,
@@ -138,46 +152,12 @@ const padBytesLeft = (bytes: Uint8Array, targetLength: number): Uint8Array => {
   return padded
 }
 
-/**
- * Coerces heterogeneous inputs into a normalized lowercase hex string
- * without a `0x` prefix. Strings have any `0x` prefix stripped and are
- * validated as hex; bigints and numbers are encoded as big-endian with
- * leading-zero padding to an even length; byte arrays are hex-encoded.
- * @param data - Value to coerce: hex string, non-negative bigint/number, or byte array.
- * @returns Lowercase hex string without a `0x` prefix.
- * @throws If `data` is a string containing non-hex characters, or a negative bigint/number.
- */
-const hexlify = (data: string | bigint | number | Uint8Array): string => {
-  if (typeof data === 'string') {
-    const stripped = stripHexPrefix(data).toLowerCase()
-    if (stripped.length > 0 && !HEX_CHARACTERS.test(stripped)) {
-      throw new Error('hexlify: input string contains non-hex characters')
-    }
-    return stripped
-  }
-
-  if (typeof data === 'bigint' || typeof data === 'number') {
-    const asBigInt = BigInt(data)
-    if (asBigInt < 0n) {
-      throw new Error('hexlify: negative values are not supported')
-    }
-    let hex = asBigInt.toString(16)
-    if (hex.length % 2 === 1) {
-      hex = `0${hex}`
-    }
-    return hex
-  }
-
-  return bytesToHex(data)
-}
-
 export {
   bigIntToBytes,
   bigIntToHex,
   bytesToBigInt,
   bytesToHex,
   hexToBytes,
-  hexlify,
   padBytesLeft,
   stripHexPrefix,
 }

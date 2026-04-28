@@ -8,7 +8,13 @@ export {
   bytesToBigInt,
   bytesToHex,
   hexToBytes,
-  hexlify,
   padBytesLeft,
   stripHexPrefix,
 } from './convert'
+export {
+  BigIntOverflowError,
+  InvalidByteLengthError,
+  InvalidHexError,
+  NegativeValueError,
+  OddLengthHexError,
+} from './errors'
