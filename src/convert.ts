@@ -8,6 +8,31 @@ import {
 
 const HEX_CHARACTERS = /^[0-9a-fA-F]*$/
 
+// Precomputed byte → 2-char hex lookup. Indexing this beats running
+// `.toString(16).padStart(2, '0')` per byte; the difference compounds on
+// large arrays (commitment trees, batch encodings).
+const BYTE_TO_HEX = Array.from(
+  { length: 256 },
+  (_, i) => i.toString(16).padStart(2, '0')
+)
+
+/**
+ * Decodes a single hex character (by charCode) into its nibble value 0-15.
+ * Used in the `hexToBytes` hot loop in place of `parseInt(_, 16)`, which is
+ * both slower and unnecessarily permissive (accepts signs, whitespace, etc).
+ * @param charCode - The character code (e.g. from `String.charCodeAt`).
+ * @returns The nibble value 0-15, or -1 if `charCode` is not a hex character.
+ */
+const charCodeToNibble = (charCode: number): number => {
+  // '0'-'9' → 0-9
+  if (charCode >= 48 && charCode <= 57) return charCode - 48
+  // 'A'-'F' → 10-15
+  if (charCode >= 65 && charCode <= 70) return charCode - 55
+  // 'a'-'f' → 10-15
+  if (charCode >= 97 && charCode <= 102) return charCode - 87
+  return -1
+}
+
 /**
  * Strips a leading `0x` prefix from a hex string if present.
  * @param hex - Hex string, optionally prefixed with `0x`.
@@ -53,8 +78,10 @@ const hexToBytes = (hex: string, options: { allowOddLength?: boolean } = {}): Ui
   }
 
   const bytes = new Uint8Array(stripped.length / 2)
-  for (let i = 0; i < bytes.length; i += 1) {
-    bytes[i] = parseInt(stripped.substring(i * 2, i * 2 + 2), 16)
+  for (let i = 0, j = 0; i < bytes.length; i += 1) {
+    const high = charCodeToNibble(stripped.charCodeAt(j++))
+    const low = charCodeToNibble(stripped.charCodeAt(j++))
+    bytes[i] = (high << 4) | low
   }
   return bytes
 }
@@ -69,7 +96,7 @@ const hexToBytes = (hex: string, options: { allowOddLength?: boolean } = {}): Ui
 const bytesToHex = (bytes: Uint8Array, options: { prefix?: boolean } = {}): string => {
   let hex = ''
   for (let i = 0; i < bytes.length; i += 1) {
-    hex += bytes[i]!.toString(16).padStart(2, '0')
+    hex += BYTE_TO_HEX[bytes[i]!]
   }
   return options.prefix === true ? `0x${hex}` : hex
 }
