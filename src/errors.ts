@@ -72,9 +72,24 @@ class InvalidByteLengthError extends Error {
   }
 }
 
+/**
+ * Thrown by `chunk` when the requested chunk size is not a positive integer.
+ */
+class InvalidChunkSizeError extends Error {
+  /**
+   * Construct an InvalidChunkSizeError.
+   * @param message - Error message describing the offending size.
+   */
+  constructor (message?: string) {
+    super(message)
+    this.name = 'InvalidChunkSizeError'
+  }
+}
+
 export {
   BigIntOverflowError,
   InvalidByteLengthError,
+  InvalidChunkSizeError,
   InvalidHexError,
   NegativeValueError,
   OddLengthHexError,

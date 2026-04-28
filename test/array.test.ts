@@ -1,6 +1,7 @@
 import { test } from 'brittle'
 
 import {
+  InvalidChunkSizeError,
   chunk,
   combine,
 } from '../src/index'
@@ -44,12 +45,12 @@ test('chunk with empty input returns empty array', (t) => {
   t.alike(chunk(new Uint8Array(0), 4), [])
 })
 
-test('chunk rejects non-positive or non-integer size', (t) => {
-  t.exception(() => chunk(new Uint8Array([1, 2]), 0), /invalid size/)
-  t.exception(() => chunk(new Uint8Array([1, 2]), -1), /invalid size/)
-  t.exception(() => chunk(new Uint8Array([1, 2]), 1.5), /invalid size/)
-  t.exception(() => chunk(new Uint8Array([1, 2]), NaN), /invalid size/)
-  t.exception(() => chunk(new Uint8Array([1, 2]), Infinity), /invalid size/)
+test('chunk throws InvalidChunkSizeError on non-positive or non-integer size', (t) => {
+  t.exception(() => chunk(new Uint8Array([1, 2]), 0), InvalidChunkSizeError)
+  t.exception(() => chunk(new Uint8Array([1, 2]), -1), InvalidChunkSizeError)
+  t.exception(() => chunk(new Uint8Array([1, 2]), 1.5), InvalidChunkSizeError)
+  t.exception(() => chunk(new Uint8Array([1, 2]), NaN), InvalidChunkSizeError)
+  t.exception(() => chunk(new Uint8Array([1, 2]), Infinity), InvalidChunkSizeError)
 })
 
 test('chunk does not mutate the input', (t) => {

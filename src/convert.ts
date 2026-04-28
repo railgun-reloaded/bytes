@@ -52,6 +52,12 @@ const stripHexPrefix = (hex: string): string => {
  *
  * Validates character set first so inputs like `'z'` produce an
  * `InvalidHexError` rather than the misleading `OddLengthHexError`.
+ *
+ * Note: `allowOddLength` only restores a single dropped leading nibble. It
+ * does NOT restore dropped leading zero bytes — an indexer that strips
+ * `0x00ab...` to `0xab...` will produce a shorter byte array than the
+ * caller may expect. Callers that require a fixed output length should
+ * follow up with `padBytesLeft(result, expectedByteLength)`.
  * @param hex - Hex string to convert.
  * @param options - Decoding options.
  * @param options.allowOddLength - When `true`, left-pad odd-length input
@@ -81,6 +87,13 @@ const hexToBytes = (hex: string, options: { allowOddLength?: boolean } = {}): Ui
   for (let i = 0, j = 0; i < bytes.length; i += 1) {
     const high = charCodeToNibble(stripped.charCodeAt(j++))
     const low = charCodeToNibble(stripped.charCodeAt(j++))
+    // Defense-in-depth: the upstream regex check (HEX_CHARACTERS) guarantees
+    // both nibbles are valid, but a future refactor that reorders or removes
+    // that check must not silently corrupt output. Without this guard,
+    // (-1 << 4) | -1 coerces into the Uint8Array as 0xff.
+    if (high < 0 || low < 0) {
+      throw new InvalidHexError('hexToBytes: input contains non-hex characters')
+    }
     bytes[i] = (high << 4) | low
   }
   return bytes
@@ -153,6 +166,7 @@ const bigIntToBytes = (value: bigint, byteLength: number): Uint8Array => {
  * @param options.prefix - When `true`, prepends `0x` to the result. Defaults to `false`.
  * @returns Zero-padded lowercase hex string.
  * @throws {NegativeValueError} If `value` is negative.
+ * @throws {InvalidByteLengthError} If `byteLength` is not a non-negative integer.
  * @throws {BigIntOverflowError} If `value` does not fit in `byteLength` bytes.
  */
 const bigIntToHex = (
@@ -165,12 +179,19 @@ const bigIntToHex = (
 
 /**
  * Left-pads a byte array with zero bytes to a target length. Returns the
- * input unchanged when it is already at least `targetLength` bytes.
+ * input unchanged (same reference) when it is already at least
+ * `targetLength` bytes.
  * @param bytes - Byte array to pad.
- * @param targetLength - Desired minimum length in bytes.
+ * @param targetLength - Desired minimum length in bytes; must be a
+ * non-negative integer.
  * @returns Byte array of at least `targetLength` bytes.
+ * @throws {InvalidByteLengthError} If `targetLength` is not a non-negative
+ * integer (mirrors `bigIntToBytes` validation).
  */
 const padBytesLeft = (bytes: Uint8Array, targetLength: number): Uint8Array => {
+  if (!Number.isInteger(targetLength) || targetLength < 0) {
+    throw new InvalidByteLengthError(`padBytesLeft: invalid targetLength ${targetLength}`)
+  }
   if (bytes.length >= targetLength) {
     return bytes
   }

@@ -153,6 +153,20 @@ test('hexToBytes with empty input ignores allowOddLength', (t) => {
   t.alike(hexToBytes('0x', { allowOddLength: true }), new Uint8Array(0))
 })
 
+test('hexToBytes with allowOddLength does NOT restore dropped leading bytes', (t) => {
+  // Locks in the documented limitation: the option only handles a single
+  // dropped leading nibble, not whole dropped leading zero bytes. A 32-byte
+  // hash that arrives missing two leading zero hex chars is still 30 bytes
+  // — callers that need a fixed length must follow up with padBytesLeft.
+  t.is(hexToBytes('0xab', { allowOddLength: true }).length, 1)
+  t.is(hexToBytes('ab', { allowOddLength: true }).length, 1)
+  // Round-trip via padBytesLeft is the documented escape hatch.
+  t.alike(
+    padBytesLeft(hexToBytes('ab', { allowOddLength: true }), 32),
+    padBytesLeft(new Uint8Array([0xab]), 32)
+  )
+})
+
 test('bytesToHex produces lowercase hex without prefix by default', (t) => {
   t.is(bytesToHex(new Uint8Array([0, 255, 128])), '00ff80')
 })
@@ -309,6 +323,19 @@ test('bigIntToHex throws BigIntOverflowError on overflow', (t) => {
   t.exception(() => bigIntToHex((1n << 256n), 32), BigIntOverflowError)
 })
 
+test('bigIntToHex propagates InvalidByteLengthError from bigIntToBytes', (t) => {
+  // bigIntToHex delegates to bigIntToBytes, so the validation error must
+  // surface unchanged. The JSDoc enumerates this @throws.
+  t.exception(() => bigIntToHex(1n, -1), InvalidByteLengthError)
+  t.exception(() => bigIntToHex(1n, 1.5), InvalidByteLengthError)
+  t.exception(() => bigIntToHex(1n, NaN), InvalidByteLengthError)
+  t.exception(() => bigIntToHex(1n, Infinity), InvalidByteLengthError)
+})
+
+test('bigIntToHex propagates NegativeValueError', (t) => {
+  t.exception(() => bigIntToHex(-1n, 4), NegativeValueError)
+})
+
 test('bigIntToHex large value (uint256)', (t) => {
   // Picked to exercise mid-byte boundaries.
   const value = 0xc5cf39211876fb5e5884327fa56fc0b75n
@@ -347,4 +374,16 @@ test('padBytesLeft does not mutate the input', (t) => {
   const snapshot = new Uint8Array(original)
   padBytesLeft(original, 8)
   t.alike(original, snapshot, 'input was not mutated')
+})
+
+test('padBytesLeft throws InvalidByteLengthError on invalid targetLength', (t) => {
+  // Mirrors bigIntToBytes validation — both helpers reject non-integer,
+  // negative, NaN, and Infinity targetLength rather than silently
+  // producing an unexpected result.
+  const bytes = new Uint8Array([1, 2])
+  t.exception(() => padBytesLeft(bytes, -1), InvalidByteLengthError)
+  t.exception(() => padBytesLeft(bytes, 1.5), InvalidByteLengthError)
+  t.exception(() => padBytesLeft(bytes, NaN), InvalidByteLengthError)
+  t.exception(() => padBytesLeft(bytes, Infinity), InvalidByteLengthError)
+  t.exception(() => padBytesLeft(bytes, -Infinity), InvalidByteLengthError)
 })

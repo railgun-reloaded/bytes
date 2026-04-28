@@ -3,6 +3,7 @@ import { test } from 'brittle'
 import {
   BigIntOverflowError,
   InvalidByteLengthError,
+  InvalidChunkSizeError,
   InvalidHexError,
   NegativeValueError,
   OddLengthHexError,
@@ -20,6 +21,7 @@ const cases = [
   { Cls: BigIntOverflowError, name: 'BigIntOverflowError' },
   { Cls: NegativeValueError, name: 'NegativeValueError' },
   { Cls: InvalidByteLengthError, name: 'InvalidByteLengthError' },
+  { Cls: InvalidChunkSizeError, name: 'InvalidChunkSizeError' },
 ] as const
 
 for (const { Cls, name } of cases) {

@@ -14,6 +14,7 @@ export {
 export {
   BigIntOverflowError,
   InvalidByteLengthError,
+  InvalidChunkSizeError,
   InvalidHexError,
   NegativeValueError,
   OddLengthHexError,
