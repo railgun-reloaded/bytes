@@ -1,96 +1,41 @@
 /**
- * Thrown by `hexToBytes` (and any caller using it without `allowOddLength`)
- * when the hex string has an odd number of characters and cannot be split
- * into whole bytes.
+ * String-union of every error code this package can throw. Used as the
+ * discriminator on `BytesError`. Adding a new failure mode is one entry
+ * here plus the corresponding `throw` site — no new class scaffolding.
  */
-class OddLengthHexError extends Error {
-  /**
-   * Construct an OddLengthHexError.
-   * @param message - Error message describing the offending input length.
-   */
-  constructor (message?: string) {
-    super(message)
-    this.name = 'OddLengthHexError'
-  }
-}
+type BytesErrorCode =
+  | 'OddLengthHex'
+  | 'InvalidHex'
+  | 'BigIntOverflow'
+  | 'NegativeValue'
+  | 'InvalidByteLength'
+  | 'InvalidChunkSize'
 
 /**
- * Thrown when a hex string contains characters outside `[0-9a-fA-F]`.
+ * The single error class thrown by every helper in this package. Consumers
+ * discriminate via `err instanceof BytesError && err.code === '<code>'`.
+ *
+ * Collapsing this to one class with a code field (rather than one subclass
+ * per failure mode) keeps the surface and tests small as new error modes
+ * are added.
  */
-class InvalidHexError extends Error {
+class BytesError extends Error {
   /**
-   * Construct an InvalidHexError.
-   * @param message - Error message describing the malformed input.
+   * The discriminator identifying which failure mode raised this error.
    */
-  constructor (message?: string) {
+  readonly code: BytesErrorCode
+
+  /**
+   * Construct a BytesError.
+   * @param code - One of the `BytesErrorCode` values.
+   * @param message - Human-readable error message.
+   */
+  constructor (code: BytesErrorCode, message?: string) {
     super(message)
-    this.name = 'InvalidHexError'
+    this.name = 'BytesError'
+    this.code = code
   }
 }
 
-/**
- * Thrown by `bigIntToBytes` when a value's binary representation does not
- * fit in the requested fixed `byteLength`.
- */
-class BigIntOverflowError extends Error {
-  /**
-   * Construct a BigIntOverflowError.
-   * @param message - Error message describing the value and byteLength.
-   */
-  constructor (message?: string) {
-    super(message)
-    this.name = 'BigIntOverflowError'
-  }
-}
-
-/**
- * Thrown when a negative value is passed to a helper that only accepts
- * non-negative inputs (e.g. `bigIntToBytes`).
- */
-class NegativeValueError extends Error {
-  /**
-   * Construct a NegativeValueError.
-   * @param message - Error message identifying the negative input.
-   */
-  constructor (message?: string) {
-    super(message)
-    this.name = 'NegativeValueError'
-  }
-}
-
-/**
- * Thrown when a `byteLength` argument is not a non-negative integer.
- */
-class InvalidByteLengthError extends Error {
-  /**
-   * Construct an InvalidByteLengthError.
-   * @param message - Error message describing the offending byteLength.
-   */
-  constructor (message?: string) {
-    super(message)
-    this.name = 'InvalidByteLengthError'
-  }
-}
-
-/**
- * Thrown by `chunk` when the requested chunk size is not a positive integer.
- */
-class InvalidChunkSizeError extends Error {
-  /**
-   * Construct an InvalidChunkSizeError.
-   * @param message - Error message describing the offending size.
-   */
-  constructor (message?: string) {
-    super(message)
-    this.name = 'InvalidChunkSizeError'
-  }
-}
-
-export {
-  BigIntOverflowError,
-  InvalidByteLengthError,
-  InvalidChunkSizeError,
-  InvalidHexError,
-  NegativeValueError,
-  OddLengthHexError,
-}
+export { BytesError }
+export type { BytesErrorCode }

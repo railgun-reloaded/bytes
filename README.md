@@ -24,7 +24,7 @@ import { hexToBytes, bytesToHex, bigIntToBytes, bytesToBigInt } from '@railgun-r
 npm run build     # tsc --build
 npm run lint      # eslint
 npm run lint:fix  # eslint --fix
-npm test          # build + node --test
+npm test          # build + brittle
 ```
 
 ## License

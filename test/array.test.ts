@@ -1,10 +1,28 @@
 import { test } from 'brittle'
 
+import type { BytesErrorCode } from '../src/index'
 import {
-  InvalidChunkSizeError,
+  BytesError,
   chunk,
   combine,
 } from '../src/index'
+
+/**
+ * Asserts that `fn` throws a `BytesError` with the given `code`.
+ * @param t - Brittle test context (typed as `any` because brittle does not
+ * publish a usable type for its assertion object).
+ * @param fn - The function expected to throw.
+ * @param code - The expected `BytesErrorCode`.
+ */
+const expectBytesError = (t: any, fn: () => unknown, code: BytesErrorCode): void => {
+  try {
+    fn()
+    t.fail(`${code}: expected throw, got none`)
+  } catch (e) {
+    t.ok(e instanceof BytesError, `${code}: expected BytesError`)
+    t.is((e as BytesError).code, code, `${code}: code mismatch`)
+  }
+}
 
 test('chunk splits evenly when length is a multiple of size', (t) => {
   t.alike(
@@ -45,12 +63,12 @@ test('chunk with empty input returns empty array', (t) => {
   t.alike(chunk(new Uint8Array(0), 4), [])
 })
 
-test('chunk throws InvalidChunkSizeError on non-positive or non-integer size', (t) => {
-  t.exception(() => chunk(new Uint8Array([1, 2]), 0), InvalidChunkSizeError)
-  t.exception(() => chunk(new Uint8Array([1, 2]), -1), InvalidChunkSizeError)
-  t.exception(() => chunk(new Uint8Array([1, 2]), 1.5), InvalidChunkSizeError)
-  t.exception(() => chunk(new Uint8Array([1, 2]), NaN), InvalidChunkSizeError)
-  t.exception(() => chunk(new Uint8Array([1, 2]), Infinity), InvalidChunkSizeError)
+test('chunk throws InvalidChunkSize on non-positive or non-integer size', (t) => {
+  expectBytesError(t, () => chunk(new Uint8Array([1, 2]), 0), 'InvalidChunkSize')
+  expectBytesError(t, () => chunk(new Uint8Array([1, 2]), -1), 'InvalidChunkSize')
+  expectBytesError(t, () => chunk(new Uint8Array([1, 2]), 1.5), 'InvalidChunkSize')
+  expectBytesError(t, () => chunk(new Uint8Array([1, 2]), NaN), 'InvalidChunkSize')
+  expectBytesError(t, () => chunk(new Uint8Array([1, 2]), Infinity), 'InvalidChunkSize')
 })
 
 test('chunk does not mutate the input', (t) => {

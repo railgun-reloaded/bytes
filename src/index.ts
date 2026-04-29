@@ -11,11 +11,5 @@ export {
   padBytesLeft,
   stripHexPrefix,
 } from './convert'
-export {
-  BigIntOverflowError,
-  InvalidByteLengthError,
-  InvalidChunkSizeError,
-  InvalidHexError,
-  NegativeValueError,
-  OddLengthHexError,
-} from './errors'
+export { BytesError } from './errors'
+export type { BytesErrorCode } from './errors'

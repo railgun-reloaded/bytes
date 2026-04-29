@@ -1,11 +1,8 @@
 import { test } from 'brittle'
 
+import type { BytesErrorCode } from '../src/index'
 import {
-  BigIntOverflowError,
-  InvalidByteLengthError,
-  InvalidHexError,
-  NegativeValueError,
-  OddLengthHexError,
+  BytesError,
   bigIntToBytes,
   bigIntToHex,
   bytesToBigInt,
@@ -15,6 +12,26 @@ import {
   stripHexPrefix,
 } from '../src/index'
 
+/**
+ * Asserts that `fn` throws a `BytesError` with the given `code`. brittle's
+ * `t.exception` only accepts a regex or constructor, so it can't
+ * discriminate on `code` directly — this helper does the catch-and-check.
+ * @param t - Brittle test context (typed as `any` because brittle does not
+ * publish a usable type for its assertion object).
+ * @param fn - The function expected to throw.
+ * @param code - The expected `BytesErrorCode`.
+ * @param label - Optional label for the assertion messages.
+ */
+const expectBytesError = (t: any, fn: () => unknown, code: BytesErrorCode, label?: string): void => {
+  try {
+    fn()
+    t.fail(`${label ?? code}: expected throw, got none`)
+  } catch (e) {
+    t.ok(e instanceof BytesError, `${label ?? code}: expected BytesError`)
+    t.is((e as BytesError).code, code, `${label ?? code}: code mismatch`)
+  }
+}
+
 test('stripHexPrefix removes 0x and leaves prefixless input alone', (t) => {
   t.is(stripHexPrefix('0xabcd'), 'abcd')
   t.is(stripHexPrefix('abcd'), 'abcd')
@@ -23,14 +40,13 @@ test('stripHexPrefix removes 0x and leaves prefixless input alone', (t) => {
 })
 
 test('stripHexPrefix only strips a single leading 0x', (t) => {
-  // Defensive: if a string accidentally has multiple prefixes, only the
-  // first is removed. Documents the actual behavior.
   t.is(stripHexPrefix('0x0xabcd'), '0xabcd')
 })
 
 test('stripHexPrefix is case-sensitive on the prefix', (t) => {
   // Uppercase 0X is intentionally not stripped; Ethereum convention is
-  // lowercase 0x and propagating the upper case input would surprise downstream.
+  // lowercase 0x. Any 0X-prefixed payload that reaches hexToBytes will be
+  // rejected by the hex-character check downstream.
   t.is(stripHexPrefix('0Xabcd'), '0Xabcd')
 })
 
@@ -79,50 +95,48 @@ test('hexToBytes handles a long input (1024 bytes)', (t) => {
   t.alike(hexToBytes(hex), bytes)
 })
 
-test('hexToBytes throws OddLengthHexError on odd-length input', (t) => {
-  t.exception(() => hexToBytes('abc'), OddLengthHexError)
-  t.exception(() => hexToBytes('0xabc'), OddLengthHexError)
+test('hexToBytes throws OddLengthHex on odd-length input', (t) => {
+  expectBytesError(t, () => hexToBytes('abc'), 'OddLengthHex')
+  expectBytesError(t, () => hexToBytes('0xabc'), 'OddLengthHex')
 })
 
-test('hexToBytes throws InvalidHexError on non-hex characters', (t) => {
-  t.exception(() => hexToBytes('zz'), InvalidHexError)
-  t.exception(() => hexToBytes('0xgg'), InvalidHexError)
+test('hexToBytes throws InvalidHex on non-hex characters', (t) => {
+  expectBytesError(t, () => hexToBytes('zz'), 'InvalidHex')
+  expectBytesError(t, () => hexToBytes('0xgg'), 'InvalidHex')
 })
 
-test('hexToBytes throws InvalidHexError on each non-hex char-class boundary', (t) => {
-  // Characters adjacent to the valid hex ranges. If the charCode decoder ever
-  // drifts (off-by-one on the boundary checks), one of these will pass when
-  // it shouldn't.
+test('hexToBytes throws InvalidHex on each non-hex char-class boundary', (t) => {
+  // Characters adjacent to the valid hex ranges. If the charCode decoder
+  // ever drifts (off-by-one on the boundary checks), one of these will pass
+  // when it shouldn't.
   for (const bad of ['/', ':', '@', 'G', '`', 'g', '!', '~']) {
-    // pad to even length so length isn't the trigger
-    t.exception(() => hexToBytes(`${bad}${bad}`), InvalidHexError, `should reject "${bad}"`)
+    expectBytesError(t, () => hexToBytes(`${bad}${bad}`), 'InvalidHex', `should reject "${bad}"`)
   }
 })
 
-test('hexToBytes throws InvalidHexError on whitespace', (t) => {
-  t.exception(() => hexToBytes('ab cd'), InvalidHexError)
-  t.exception(() => hexToBytes(' abcd'), InvalidHexError)
-  t.exception(() => hexToBytes('abcd '), InvalidHexError)
-  t.exception(() => hexToBytes('ab\ncd'), InvalidHexError)
-  t.exception(() => hexToBytes('ab\tcd'), InvalidHexError)
+test('hexToBytes throws InvalidHex on whitespace', (t) => {
+  expectBytesError(t, () => hexToBytes('ab cd'), 'InvalidHex')
+  expectBytesError(t, () => hexToBytes(' abcd'), 'InvalidHex')
+  expectBytesError(t, () => hexToBytes('abcd '), 'InvalidHex')
+  expectBytesError(t, () => hexToBytes('ab\ncd'), 'InvalidHex')
+  expectBytesError(t, () => hexToBytes('ab\tcd'), 'InvalidHex')
 })
 
-test('hexToBytes throws InvalidHexError on unicode characters', (t) => {
+test('hexToBytes throws InvalidHex on unicode characters', (t) => {
   // Multi-byte unicode chars must not slip through. charCodeAt returns the
   // surrogate code unit, which is well outside hex-char ranges.
-  t.exception(() => hexToBytes('0xab💩cd'), InvalidHexError)
-  t.exception(() => hexToBytes('0xabñcd'), InvalidHexError)
+  expectBytesError(t, () => hexToBytes('0xab💩cd'), 'InvalidHex')
+  expectBytesError(t, () => hexToBytes('0xabñcd'), 'InvalidHex')
 })
 
-test('hexToBytes prefers InvalidHexError over OddLengthHexError', (t) => {
+test('hexToBytes prefers InvalidHex over OddLengthHex on single non-hex char', (t) => {
   // 'z' is both odd-length and non-hex; non-hex is the more accurate error
   // and must be reported first.
-  t.exception(() => hexToBytes('z'), InvalidHexError)
+  expectBytesError(t, () => hexToBytes('z'), 'InvalidHex')
 })
 
-test('hexToBytes prefers InvalidHexError on odd-length non-hex strings', (t) => {
-  // Odd-length AND every char is non-hex; should still surface as InvalidHex.
-  t.exception(() => hexToBytes('zzz'), InvalidHexError)
+test('hexToBytes prefers InvalidHex on odd-length all-non-hex strings', (t) => {
+  expectBytesError(t, () => hexToBytes('zzz'), 'InvalidHex')
 })
 
 test('hexToBytes with allowOddLength left-pads odd-length input', (t) => {
@@ -139,13 +153,13 @@ test('hexToBytes with allowOddLength leaves even-length input unchanged', (t) =>
   t.alike(hexToBytes('abcd', { allowOddLength: true }), new Uint8Array([0xab, 0xcd]))
 })
 
-test('hexToBytes with allowOddLength still throws InvalidHexError on non-hex', (t) => {
-  t.exception(() => hexToBytes('zzz', { allowOddLength: true }), InvalidHexError)
-  t.exception(() => hexToBytes('z', { allowOddLength: true }), InvalidHexError)
+test('hexToBytes with allowOddLength still throws InvalidHex on non-hex', (t) => {
+  expectBytesError(t, () => hexToBytes('zzz', { allowOddLength: true }), 'InvalidHex')
+  expectBytesError(t, () => hexToBytes('z', { allowOddLength: true }), 'InvalidHex')
 })
 
 test('hexToBytes with allowOddLength: false explicitly rejects odd length', (t) => {
-  t.exception(() => hexToBytes('abc', { allowOddLength: false }), OddLengthHexError)
+  expectBytesError(t, () => hexToBytes('abc', { allowOddLength: false }), 'OddLengthHex')
 })
 
 test('hexToBytes with empty input ignores allowOddLength', (t) => {
@@ -160,7 +174,6 @@ test('hexToBytes with allowOddLength does NOT restore dropped leading bytes', (t
   // — callers that need a fixed length must follow up with padBytesLeft.
   t.is(hexToBytes('0xab', { allowOddLength: true }).length, 1)
   t.is(hexToBytes('ab', { allowOddLength: true }).length, 1)
-  // Round-trip via padBytesLeft is the documented escape hatch.
   t.alike(
     padBytesLeft(hexToBytes('ab', { allowOddLength: true }), 32),
     padBytesLeft(new Uint8Array([0xab]), 32)
@@ -183,7 +196,6 @@ test('bytesToHex empty array returns empty string', (t) => {
 })
 
 test('bytesToHex single-digit nibbles are zero-padded', (t) => {
-  // Every nibble that requires padding: 0x0, 0x01, 0x0a, 0x0f.
   t.is(bytesToHex(new Uint8Array([0])), '00')
   t.is(bytesToHex(new Uint8Array([1])), '01')
   t.is(bytesToHex(new Uint8Array([0x0a])), '0a')
@@ -192,8 +204,8 @@ test('bytesToHex single-digit nibbles are zero-padded', (t) => {
 })
 
 test('bytesToHex covers every byte value 0..255 (lookup-table correctness)', (t) => {
-  // The precomputed BYTE_TO_HEX table is built once at module load. If it ever
-  // gets corrupted or off-by-one, this test fails for every entry.
+  // The precomputed BYTE_TO_HEX table is built once at module load. If it
+  // ever gets corrupted or off-by-one, this test fails for every entry.
   const all = new Uint8Array(256)
   for (let i = 0; i < 256; i += 1) all[i] = i
   const hex = bytesToHex(all)
@@ -232,7 +244,6 @@ test('bytesToBigInt decodes big-endian', (t) => {
 })
 
 test('bytesToBigInt is big-endian (not little-endian)', (t) => {
-  // Explicit ordering check — most significant byte at index 0.
   t.is(bytesToBigInt(new Uint8Array([0x01, 0x00])), 0x100n)
   t.is(bytesToBigInt(new Uint8Array([0x00, 0x01])), 0x1n)
 })
@@ -258,34 +269,32 @@ test('bigIntToBytes encodes big-endian with fixed length', (t) => {
 
 test('bigIntToBytes byteLength=0 accepts only 0n', (t) => {
   t.alike(bigIntToBytes(0n, 0), new Uint8Array(0))
-  t.exception(() => bigIntToBytes(1n, 0), BigIntOverflowError)
+  expectBytesError(t, () => bigIntToBytes(1n, 0), 'BigIntOverflow')
 })
 
 test('bigIntToBytes overflow check at exact boundary', (t) => {
-  // n bytes can hold values 0 .. 2^(n*8) - 1
   t.alike(bigIntToBytes(0xffn, 1), new Uint8Array([0xff]))
-  t.exception(() => bigIntToBytes(0x100n, 1), BigIntOverflowError)
+  expectBytesError(t, () => bigIntToBytes(0x100n, 1), 'BigIntOverflow')
 
   t.alike(bigIntToBytes(0xffffn, 2), new Uint8Array([0xff, 0xff]))
-  t.exception(() => bigIntToBytes(0x10000n, 2), BigIntOverflowError)
+  expectBytesError(t, () => bigIntToBytes(0x10000n, 2), 'BigIntOverflow')
 
-  // 32-byte uint256 max
   const uint256Max = (1n << 256n) - 1n
   t.is(bigIntToBytes(uint256Max, 32).length, 32)
-  t.exception(() => bigIntToBytes(uint256Max + 1n, 32), BigIntOverflowError)
+  expectBytesError(t, () => bigIntToBytes(uint256Max + 1n, 32), 'BigIntOverflow')
 })
 
-test('bigIntToBytes throws NegativeValueError on negative values', (t) => {
-  t.exception(() => bigIntToBytes(-1n, 4), NegativeValueError)
-  t.exception(() => bigIntToBytes(-(1n << 64n), 32), NegativeValueError)
+test('bigIntToBytes throws NegativeValue on negative values', (t) => {
+  expectBytesError(t, () => bigIntToBytes(-1n, 4), 'NegativeValue')
+  expectBytesError(t, () => bigIntToBytes(-(1n << 64n), 32), 'NegativeValue')
 })
 
-test('bigIntToBytes throws InvalidByteLengthError on invalid byteLength', (t) => {
-  t.exception(() => bigIntToBytes(0n, -1), InvalidByteLengthError)
-  t.exception(() => bigIntToBytes(0n, 1.5), InvalidByteLengthError)
-  t.exception(() => bigIntToBytes(0n, NaN), InvalidByteLengthError)
-  t.exception(() => bigIntToBytes(0n, Infinity), InvalidByteLengthError)
-  t.exception(() => bigIntToBytes(0n, -Infinity), InvalidByteLengthError)
+test('bigIntToBytes throws InvalidByteLength on invalid byteLength', (t) => {
+  expectBytesError(t, () => bigIntToBytes(0n, -1), 'InvalidByteLength')
+  expectBytesError(t, () => bigIntToBytes(0n, 1.5), 'InvalidByteLength')
+  expectBytesError(t, () => bigIntToBytes(0n, NaN), 'InvalidByteLength')
+  expectBytesError(t, () => bigIntToBytes(0n, Infinity), 'InvalidByteLength')
+  expectBytesError(t, () => bigIntToBytes(0n, -Infinity), 'InvalidByteLength')
 })
 
 test('bigint round-trips through bytes across a range of values', (t) => {
@@ -315,29 +324,28 @@ test('bigIntToHex produces zero-padded hex', (t) => {
 test('bigIntToHex byteLength=0', (t) => {
   t.is(bigIntToHex(0n, 0), '')
   t.is(bigIntToHex(0n, 0, { prefix: true }), '0x')
-  t.exception(() => bigIntToHex(1n, 0), BigIntOverflowError)
+  expectBytesError(t, () => bigIntToHex(1n, 0), 'BigIntOverflow')
 })
 
-test('bigIntToHex throws BigIntOverflowError on overflow', (t) => {
-  t.exception(() => bigIntToHex(0x10000n, 1), BigIntOverflowError)
-  t.exception(() => bigIntToHex((1n << 256n), 32), BigIntOverflowError)
+test('bigIntToHex throws BigIntOverflow on overflow', (t) => {
+  expectBytesError(t, () => bigIntToHex(0x10000n, 1), 'BigIntOverflow')
+  expectBytesError(t, () => bigIntToHex((1n << 256n), 32), 'BigIntOverflow')
 })
 
-test('bigIntToHex propagates InvalidByteLengthError from bigIntToBytes', (t) => {
+test('bigIntToHex propagates InvalidByteLength from bigIntToBytes', (t) => {
   // bigIntToHex delegates to bigIntToBytes, so the validation error must
   // surface unchanged. The JSDoc enumerates this @throws.
-  t.exception(() => bigIntToHex(1n, -1), InvalidByteLengthError)
-  t.exception(() => bigIntToHex(1n, 1.5), InvalidByteLengthError)
-  t.exception(() => bigIntToHex(1n, NaN), InvalidByteLengthError)
-  t.exception(() => bigIntToHex(1n, Infinity), InvalidByteLengthError)
+  expectBytesError(t, () => bigIntToHex(1n, -1), 'InvalidByteLength')
+  expectBytesError(t, () => bigIntToHex(1n, 1.5), 'InvalidByteLength')
+  expectBytesError(t, () => bigIntToHex(1n, NaN), 'InvalidByteLength')
+  expectBytesError(t, () => bigIntToHex(1n, Infinity), 'InvalidByteLength')
 })
 
-test('bigIntToHex propagates NegativeValueError', (t) => {
-  t.exception(() => bigIntToHex(-1n, 4), NegativeValueError)
+test('bigIntToHex propagates NegativeValue', (t) => {
+  expectBytesError(t, () => bigIntToHex(-1n, 4), 'NegativeValue')
 })
 
 test('bigIntToHex large value (uint256)', (t) => {
-  // Picked to exercise mid-byte boundaries.
   const value = 0xc5cf39211876fb5e5884327fa56fc0b75n
   t.is(
     bigIntToHex(value, 32),
@@ -376,14 +384,14 @@ test('padBytesLeft does not mutate the input', (t) => {
   t.alike(original, snapshot, 'input was not mutated')
 })
 
-test('padBytesLeft throws InvalidByteLengthError on invalid targetLength', (t) => {
+test('padBytesLeft throws InvalidByteLength on invalid targetLength', (t) => {
   // Mirrors bigIntToBytes validation — both helpers reject non-integer,
   // negative, NaN, and Infinity targetLength rather than silently
   // producing an unexpected result.
   const bytes = new Uint8Array([1, 2])
-  t.exception(() => padBytesLeft(bytes, -1), InvalidByteLengthError)
-  t.exception(() => padBytesLeft(bytes, 1.5), InvalidByteLengthError)
-  t.exception(() => padBytesLeft(bytes, NaN), InvalidByteLengthError)
-  t.exception(() => padBytesLeft(bytes, Infinity), InvalidByteLengthError)
-  t.exception(() => padBytesLeft(bytes, -Infinity), InvalidByteLengthError)
+  expectBytesError(t, () => padBytesLeft(bytes, -1), 'InvalidByteLength')
+  expectBytesError(t, () => padBytesLeft(bytes, 1.5), 'InvalidByteLength')
+  expectBytesError(t, () => padBytesLeft(bytes, NaN), 'InvalidByteLength')
+  expectBytesError(t, () => padBytesLeft(bytes, Infinity), 'InvalidByteLength')
+  expectBytesError(t, () => padBytesLeft(bytes, -Infinity), 'InvalidByteLength')
 })

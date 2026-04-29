@@ -1,50 +1,43 @@
 import { test } from 'brittle'
 
-import {
-  BigIntOverflowError,
-  InvalidByteLengthError,
-  InvalidChunkSizeError,
-  InvalidHexError,
-  NegativeValueError,
-  OddLengthHexError,
-} from '../src/index'
+import type { BytesErrorCode } from '../src/index'
+import { BytesError } from '../src/index'
 
-// Each error class is exported and used as the second argument to
-// `assert.throws` / `t.exception` in consumer test suites. These tests pin
-// the contract: each is a real Error subclass with the correct `name`, the
-// `message` is propagated, and `instanceof Error` works (which is what the
-// consumer checks rely on).
+const codes: BytesErrorCode[] = [
+  'OddLengthHex',
+  'InvalidHex',
+  'BigIntOverflow',
+  'NegativeValue',
+  'InvalidByteLength',
+  'InvalidChunkSize',
+]
 
-const cases = [
-  { Cls: OddLengthHexError, name: 'OddLengthHexError' },
-  { Cls: InvalidHexError, name: 'InvalidHexError' },
-  { Cls: BigIntOverflowError, name: 'BigIntOverflowError' },
-  { Cls: NegativeValueError, name: 'NegativeValueError' },
-  { Cls: InvalidByteLengthError, name: 'InvalidByteLengthError' },
-  { Cls: InvalidChunkSizeError, name: 'InvalidChunkSizeError' },
-] as const
+test('BytesError extends Error', (t) => {
+  const err = new BytesError('InvalidHex', 'test')
+  t.ok(err instanceof Error)
+  t.ok(err instanceof BytesError)
+})
 
-for (const { Cls, name } of cases) {
-  test(`${name} extends Error`, (t) => {
-    const err = new Cls('test message')
-    t.ok(err instanceof Error, `${name} should be an Error`)
-    t.ok(err instanceof Cls, `${name} should be its own class`)
-  })
+test('BytesError carries the code as a readonly field', (t) => {
+  for (const code of codes) {
+    const err = new BytesError(code, 'msg')
+    t.is(err.code, code, `code=${code}`)
+  }
+})
 
-  test(`${name} sets .name correctly`, (t) => {
-    const err = new Cls('test message')
-    t.is(err.name, name)
-  })
+test('BytesError sets .name to "BytesError" regardless of code', (t) => {
+  for (const code of codes) {
+    t.is(new BytesError(code).name, 'BytesError')
+  }
+})
 
-  test(`${name} propagates the message`, (t) => {
-    const err = new Cls('something went wrong')
-    t.is(err.message, 'something went wrong')
-  })
+test('BytesError propagates the message', (t) => {
+  const err = new BytesError('InvalidHex', 'something went wrong')
+  t.is(err.message, 'something went wrong')
+})
 
-  test(`${name} accepts construction without a message`, (t) => {
-    // brittle's t.exception(fn, ErrorClass) calls `new Cls()` internally;
-    // the class must remain constructible without arguments.
-    const err = new Cls()
-    t.is(err.name, name)
-  })
-}
+test('BytesError message is optional', (t) => {
+  const err = new BytesError('InvalidHex')
+  t.is(err.message, '')
+  t.is(err.code, 'InvalidHex')
+})

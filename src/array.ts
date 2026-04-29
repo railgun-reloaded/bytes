@@ -1,4 +1,4 @@
-import { InvalidChunkSizeError } from './errors'
+import { BytesError } from './errors'
 
 /**
  * Splits a byte array into fixed-size chunks. The final chunk may be shorter
@@ -7,11 +7,11 @@ import { InvalidChunkSizeError } from './errors'
  * @param data - Byte array to split.
  * @param size - Chunk size in bytes; must be a positive integer.
  * @returns Array of chunk byte arrays in order.
- * @throws {InvalidChunkSizeError} If `size` is not a positive integer.
+ * @throws {BytesError} `code: 'InvalidChunkSize'` if `size` is not a positive integer.
  */
 const chunk = (data: Uint8Array, size: number): Uint8Array[] => {
   if (!Number.isInteger(size) || size <= 0) {
-    throw new InvalidChunkSizeError(`chunk: invalid size ${size}`)
+    throw new BytesError('InvalidChunkSize', `chunk: invalid size ${size}`)
   }
   const chunks: Uint8Array[] = []
   for (let i = 0; i < data.length; i += size) {
