@@ -167,20 +167,43 @@ const bigIntToHex = (
 }
 
 /**
- * Left-pads a byte array with zero bytes to a target length. Returns the
- * input unchanged (same reference) when it is already at least
- * `targetLength` bytes.
+ * Left-pads a byte array with zero bytes to a target length. By default,
+ * `targetLength` is treated as a *minimum*: input already at or above the
+ * target is returned unchanged (same reference). Pass `{ strict: true }`
+ * to instead treat `targetLength` as a hard cap — over-length input then
+ * throws `ByteLengthExceeded` rather than silently passing through.
+ * Use strict mode when the caller relies on a fixed output size and an
+ * over-length input is a bug (e.g. fixed-32-byte commitment hashes).
  * @param bytes - Byte array to pad.
- * @param targetLength - Desired minimum length in bytes; must be a
+ * @param targetLength - Desired output length in bytes; must be a
  * non-negative integer.
- * @returns Byte array of at least `targetLength` bytes.
+ * @param options - Padding options.
+ * @param options.strict - When `true`, throws `ByteLengthExceeded` if
+ * `bytes.length > targetLength` instead of returning the input unchanged.
+ * Defaults to `false`.
+ * @returns Byte array of at least `targetLength` bytes (loose mode), or
+ * exactly `targetLength` bytes (strict mode).
  * @throws {BytesError} `code: 'InvalidByteLength'` if `targetLength` is not a non-negative integer.
+ * @throws {BytesError} `code: 'ByteLengthExceeded'` if `options.strict === true` and `bytes.length > targetLength`.
  */
-const padBytesLeft = (bytes: Uint8Array, targetLength: number): Uint8Array => {
+const padBytesLeft = (
+  bytes: Uint8Array,
+  targetLength: number,
+  options: { strict?: boolean } = {}
+): Uint8Array => {
   if (!Number.isInteger(targetLength) || targetLength < 0) {
     throw new BytesError('InvalidByteLength', `padBytesLeft: invalid targetLength ${targetLength}`)
   }
-  if (bytes.length >= targetLength) {
+  if (bytes.length > targetLength) {
+    if (options.strict === true) {
+      throw new BytesError(
+        'ByteLengthExceeded',
+        `padBytesLeft: input length ${bytes.length} exceeds targetLength ${targetLength}`
+      )
+    }
+    return bytes
+  }
+  if (bytes.length === targetLength) {
     return bytes
   }
   const padded = new Uint8Array(targetLength)

@@ -10,6 +10,7 @@ type BytesErrorCode =
   | 'NegativeValue'
   | 'InvalidByteLength'
   | 'InvalidChunkSize'
+  | 'ByteLengthExceeded'
 
 /**
  * The single error class thrown by every helper in this package. Consumers

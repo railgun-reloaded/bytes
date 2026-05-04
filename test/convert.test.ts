@@ -395,3 +395,58 @@ test('padBytesLeft throws InvalidByteLength on invalid targetLength', (t) => {
   expectBytesError(t, () => padBytesLeft(bytes, Infinity), 'InvalidByteLength')
   expectBytesError(t, () => padBytesLeft(bytes, -Infinity), 'InvalidByteLength')
 })
+
+test('padBytesLeft strict mode pads short input with zeros', (t) => {
+  t.alike(
+    padBytesLeft(new Uint8Array([0xab, 0xcd]), 4, { strict: true }),
+    new Uint8Array([0, 0, 0xab, 0xcd])
+  )
+})
+
+test('padBytesLeft strict mode returns input unchanged when length matches target exactly', (t) => {
+  const bytes = new Uint8Array([1, 2, 3, 4])
+  t.is(padBytesLeft(bytes, 4, { strict: true }), bytes)
+})
+
+test('padBytesLeft strict mode throws ByteLengthExceeded when input is longer than target', (t) => {
+  // The whole point of strict mode: never silently pass through an
+  // over-length input.
+  const bytes = new Uint8Array([1, 2, 3, 4, 5])
+  expectBytesError(t, () => padBytesLeft(bytes, 4, { strict: true }), 'ByteLengthExceeded')
+  expectBytesError(t, () => padBytesLeft(bytes, 0, { strict: true }), 'ByteLengthExceeded')
+})
+
+test('padBytesLeft strict mode empty input pads to target', (t) => {
+  t.alike(
+    padBytesLeft(new Uint8Array(0), 4, { strict: true }),
+    new Uint8Array([0, 0, 0, 0])
+  )
+})
+
+test('padBytesLeft strict mode target=0 with empty input returns input unchanged', (t) => {
+  const empty = new Uint8Array(0)
+  t.is(padBytesLeft(empty, 0, { strict: true }), empty)
+})
+
+test('padBytesLeft strict mode does not mutate the input', (t) => {
+  const original = new Uint8Array([1, 2])
+  const snapshot = new Uint8Array(original)
+  padBytesLeft(original, 8, { strict: true })
+  t.alike(original, snapshot, 'input was not mutated')
+})
+
+test('padBytesLeft strict mode throws InvalidByteLength on invalid targetLength', (t) => {
+  // Validation runs before the strict overflow check; same codes as loose mode.
+  const bytes = new Uint8Array([1, 2])
+  expectBytesError(t, () => padBytesLeft(bytes, -1, { strict: true }), 'InvalidByteLength')
+  expectBytesError(t, () => padBytesLeft(bytes, 1.5, { strict: true }), 'InvalidByteLength')
+  expectBytesError(t, () => padBytesLeft(bytes, NaN, { strict: true }), 'InvalidByteLength')
+  expectBytesError(t, () => padBytesLeft(bytes, Infinity, { strict: true }), 'InvalidByteLength')
+  expectBytesError(t, () => padBytesLeft(bytes, -Infinity, { strict: true }), 'InvalidByteLength')
+})
+
+test('padBytesLeft strict: false matches loose default behavior', (t) => {
+  // Explicit strict: false is the same as omitting the option.
+  const longInput = new Uint8Array([1, 2, 3, 4, 5])
+  t.is(padBytesLeft(longInput, 4, { strict: false }), longInput)
+})
