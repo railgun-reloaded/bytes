@@ -22,6 +22,7 @@
     "build": "tsc --build",
     "build:nocheck": "tsc --noEmitOnError false",
     "clean": "tsc --build --clean",
+    "prepare": "tsc --build",
     "test": "npm run build && NODE_OPTIONS=--enable-source-maps brittle test/**/*.test.js"
   },
   "devDependencies": {
