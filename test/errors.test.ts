@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { BytesErrorCode } from '../src/index'
-import { BytesError } from '../src/index'
+import type { BytesErrorCode } from '../src/index.js'
+import { BytesError } from '../src/index.js'
 
 const codes: BytesErrorCode[] = [
   'OddLengthHex',

@@ -1,4 +1,4 @@
-import { BytesError } from './errors'
+import { BytesError } from './errors.js'
 
 /**
  * Splits a byte array into fixed-size chunks. The final chunk may be shorter

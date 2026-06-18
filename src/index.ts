@@ -1,7 +1,7 @@
 export {
   chunk,
   combine,
-} from './array'
+} from './array.js'
 export {
   bigIntToBytes,
   bigIntToHex,
@@ -10,6 +10,6 @@ export {
   hexToBytes,
   padBytesLeft,
   stripHexPrefix,
-} from './convert'
-export { BytesError } from './errors'
-export type { BytesErrorCode } from './errors'
+} from './convert.js'
+export { BytesError } from './errors.js'
+export type { BytesErrorCode } from './errors.js'

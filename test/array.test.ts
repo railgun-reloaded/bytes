@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { BytesErrorCode } from '../src/index'
+import type { BytesErrorCode } from '../src/index.js'
 import {
   BytesError,
   chunk,
   combine,
-} from '../src/index'
+} from '../src/index.js'
 
 /**
  * Asserts that `fn` throws a `BytesError` with the given `code`.

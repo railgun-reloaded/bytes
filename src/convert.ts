@@ -1,4 +1,4 @@
-import { BytesError } from './errors'
+import { BytesError } from './errors.js'
 
 const HEX_CHARACTERS = /^[0-9a-fA-F]*$/
 
